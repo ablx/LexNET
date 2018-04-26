@@ -5,7 +5,7 @@ from spacy.en import English
 from collections import defaultdict
 import pandas as pd
 
-restrict_direction = True
+restrict_direction = False
 
 def main():
     """
@@ -18,14 +18,7 @@ def main():
     out_file = 'path_out'
 
     res_paths = pd.DataFrame(columns=['id', 'sentence', 'object_a', 'object_b', 'most_frequent_label', 'most_frequent_percentage', 'path'])
-    objects = set()
     vocabulary = ['objecta', 'objectb']#set()
-
-    #for w in df.object_a.values.tolist()+df.object_b.values.tolist():
-     #   objects.add(w)
-
-    #for w in objects:
-    #    [vocabulary.add(t.lemma_) for t in nlp(w.decode('utf8'))]
 
     loc = 0
 
@@ -50,7 +43,7 @@ def main():
                     print >> f_out, '\t'.join([sentence, x, y, 'NO_PATH'])
                     res_paths.loc[loc] = [row['id'], row['sentence'], row['object_a'], row['object_b'], row['most_frequent_label'], row['most_frequent_percentage'], 'NO_PATH_B']
                     loc += 1
-    res_paths.to_csv('paths.csv' if restrict_direction else 'paths_unrestricted.csv',encoding='utf-8',index=False)
+    res_paths.to_csv('paths_original.csv' if restrict_direction else 'paths_unrestricted.csv',encoding='utf-8',index=False)
 
 
 def preprocess_sentence(sent, object_a, object_b):
@@ -327,7 +320,7 @@ def pretty_print(set_x_l, x, set_x_r, hx, lch, hy, set_y_l, y, set_y_r):
 
 
 # Constants
-MAX_PATH_LEN = 10000
+MAX_PATH_LEN = 4 if restrict_direction else 50
 ROOT = 0
 UP = 1
 DOWN = 2
