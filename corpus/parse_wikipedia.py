@@ -1,56 +1,63 @@
 import codecs
+import string
 
-from docopt import docopt
 from spacy.en import English
 from collections import defaultdict
+import pandas as pd
 
+restrict_direction = True
 
 def main():
     """
     Creates a "knowledge resource" from triplets file
     """
 
-    # Get the arguments
-    args = docopt("""Parse the Wikipedia dump and create a triplets file, each line is formatted as follows: X\t\Y\tpath
-
-    Usage:
-        parse_wikipedia.py <wiki_file> <vocabulary_file> <out_file>
-
-        <wiki_file> = the Wikipedia dump file
-        <vocabulary_file> = a file containing the words to include
-        <out_file> = the output file
-    """)
-
     nlp = English()
+    df = pd.read_csv('data.csv')
 
-    wiki_file = args['<wiki_file>']
-    vocabulary_file = args['<vocabulary_file>']
-    out_file = args['<out_file>']
+    out_file = 'path_out'
 
-    # Load the phrase pair files
-    with codecs.open(vocabulary_file, 'r', 'utf-8') as f_in:
-        vocabulary = set([line.strip() for line in f_in])
+    res_paths = pd.DataFrame(columns=['id', 'sentence', 'object_a', 'object_b', 'most_frequent_label', 'most_frequent_percentage', 'path'])
+    objects = set()
+    vocabulary = ['objecta', 'objectb']#set()
 
-    with codecs.open(wiki_file, 'r', 'utf-8') as f_in:
-        with codecs.open(out_file, 'w', 'utf-8') as f_out:
+    #for w in df.object_a.values.tolist()+df.object_b.values.tolist():
+     #   objects.add(w)
 
-            # Read the next paragraph
-            for paragraph in f_in:
+    #for w in objects:
+    #    [vocabulary.add(t.lemma_) for t in nlp(w.decode('utf8'))]
 
-                # Skip empty lines
-                paragraph = paragraph.strip()
-                if len(paragraph) == 0:
-                    continue
+    loc = 0
 
-                parsed_par = nlp(unicode(paragraph))
+    with codecs.open(out_file, 'w', 'utf-8') as f_out:
+        # Read the next paragraph
+        for i, row in df.iterrows():
+            sentence = preprocess_sentence(row['sentence'], row['object_a'], row['object_b']).decode("utf8")
+            parsed_par = nlp(sentence)
+            for sent in  parsed_par.sents: # [parsed_par[0:]]:
+                dependency_paths = parse_sentence(sent, vocabulary)
+                if len(dependency_paths) > 0:
+                    for (x, y), paths in dependency_paths.iteritems():
+                        if len(paths) == 0:
+                            print >> f_out, '\t'.join([sentence, x, y, 'NO_PATH'])
+                            res_paths.loc[loc] = [row['id'], row['sentence'], row['object_a'], row['object_b'], row['most_frequent_label'], row['most_frequent_percentage'], 'NO_PATH_A']
+                            loc += 1
+                        for path in paths:
+                            print >> f_out, '\t'.join([sentence, x, y, path])
+                            res_paths.loc[loc] = [row['id'], row['sentence'], row['object_a'], row['object_b'], row['most_frequent_label'], row['most_frequent_percentage'], path]
+                            loc += 1
+                else:
+                    print >> f_out, '\t'.join([sentence, x, y, 'NO_PATH'])
+                    res_paths.loc[loc] = [row['id'], row['sentence'], row['object_a'], row['object_b'], row['most_frequent_label'], row['most_frequent_percentage'], 'NO_PATH_B']
+                    loc += 1
+    res_paths.to_csv('paths.csv' if restrict_direction else 'paths_unrestricted.csv',encoding='utf-8',index=False)
 
-                # Parse each sentence separately
-                for sent in parsed_par.sents:
-                    dependency_paths = parse_sentence(sent, vocabulary)
-                    if len(dependency_paths) > 0:
-                        for (x, y), paths in dependency_paths.iteritems():
-                            for path in paths:
-                                print >> f_out, '\t'.join([x, y, path])
+
+def preprocess_sentence(sent, object_a, object_b):
+    a1 = sent.replace(object_a, ' Objecta ')
+    a2 = a1.replace(object_b, ' Objectb ')
+    a3 = a2.translate(None, string.punctuation)
+    return a3
 
 
 def parse_sentence(sent, vocabulary):
@@ -62,8 +69,8 @@ def parse_sentence(sent, vocabulary):
     """
 
     # Get all term indices
-    indices = [(token.lemma_, sent[i:i+1], i, i) for i, token in enumerate(sent)
-               if len(token.orth_) > 2 and token.lemma_ in vocabulary and token.pos_ in ['NOUN', 'VERB', 'ADJ']]
+    indices = [(token.lemma_, sent[i:i + 1], i, i) for i, token in enumerate(sent)
+               if len(token.orth_) > 2 and token.lemma_ in vocabulary and token.pos_ in ['PROPN', 'NOUN', 'VERB', 'ADJ']]
 
     # Add noun chunks for the current sentence
     # Don't include noun chunks with only one word - these are nouns already included
@@ -146,23 +153,23 @@ def shortest_path(path):
                 break
 
         if len(hx) > i:
-            lch = hx[i-1]
+            lch = hx[i - 1]
         elif len(hy) > i:
-            lch = hy[i-1]
+            lch = hy[i - 1]
         else:
             return None
 
         # The path from x to the lowest common head
-        hx = hx[i+1:]
+        hx = hx[i + 0:]
 
         # The path from the lowest common head to y
-        hy = hy[i+1:]
+        hy = hy[i + 0:]
 
-    if lch and check_direction(lch, hx, lambda h: h.lefts):
+    if restrict_direction and lch and check_direction(lch, hx, lambda h: h.lefts):
         return None
     hx = hx[::-1]
 
-    if lch and check_direction(lch, hy, lambda h: h.rights):
+    if restrict_direction and lch and check_direction(lch, hy, lambda h: h.rights):
         return None
 
     return (x_token, hx, lch, hy, y_token)
@@ -320,7 +327,7 @@ def pretty_print(set_x_l, x, set_x_r, hx, lch, hy, set_y_l, y, set_y_r):
 
 
 # Constants
-MAX_PATH_LEN = 4
+MAX_PATH_LEN = 10000
 ROOT = 0
 UP = 1
 DOWN = 2
