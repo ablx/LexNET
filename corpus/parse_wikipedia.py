@@ -5,7 +5,16 @@ from spacy.en import English
 from collections import defaultdict
 import pandas as pd
 
-restrict_direction = False
+# Constants
+MAX_PATH_LEN = 16
+ROOT = 0
+UP = 1
+DOWN = 2
+SAT = 3
+
+restrict_direction = True
+include_lemma = True
+
 
 def main():
     """
@@ -13,44 +22,41 @@ def main():
     """
 
     nlp = English()
-    df = pd.read_csv('data.csv')
-
+    df = pd.read_csv('data_if.csv')
+    df_field = 'pre_path_middle'
     out_file = 'path_out'
 
     res_paths = pd.DataFrame(columns=['id', 'sentence', 'object_a', 'object_b', 'most_frequent_label', 'most_frequent_percentage', 'path'])
-    vocabulary = ['objecta', 'objectb']#set()
+    vocabulary = ['objecta', 'objectb']  # set()
 
     loc = 0
 
     with codecs.open(out_file, 'w', 'utf-8') as f_out:
         # Read the next paragraph
         for i, row in df.iterrows():
-            sentence = preprocess_sentence(row['sentence'], row['object_a'], row['object_b']).decode("utf8")
+            sentence = preprocess_sentence(row[df_field], row['object_a'], row['object_b']).decode("utf8")
             parsed_par = nlp(sentence)
-            for sent in  parsed_par.sents: # [parsed_par[0:]]:
+            for sent in [parsed_par[0:]]:
                 dependency_paths = parse_sentence(sent, vocabulary)
                 if len(dependency_paths) > 0:
                     for (x, y), paths in dependency_paths.iteritems():
                         if len(paths) == 0:
-                            print >> f_out, '\t'.join([sentence, x, y, 'NO_PATH'])
-                            res_paths.loc[loc] = [row['id'], row['sentence'], row['object_a'], row['object_b'], row['most_frequent_label'], row['most_frequent_percentage'], 'NO_PATH_A']
+                            res_paths.loc[loc] = [row['id'], sent.text, row['object_a'], row['object_b'], row['most_frequent_label'], row['most_frequent_percentage'], 'NOPATH']
                             loc += 1
                         for path in paths:
-                            print >> f_out, '\t'.join([sentence, x, y, path])
-                            res_paths.loc[loc] = [row['id'], row['sentence'], row['object_a'], row['object_b'], row['most_frequent_label'], row['most_frequent_percentage'], path]
+                            res_paths.loc[loc] = [row['id'], sent.text, row['object_a'], row['object_b'], row['most_frequent_label'], row['most_frequent_percentage'], path]
                             loc += 1
                 else:
                     print >> f_out, '\t'.join([sentence, x, y, 'NO_PATH'])
-                    res_paths.loc[loc] = [row['id'], row['sentence'], row['object_a'], row['object_b'], row['most_frequent_label'], row['most_frequent_percentage'], 'NO_PATH_B']
+                    res_paths.loc[loc] = [row['id'], sent.text, row['object_a'], row['object_b'], row['most_frequent_label'], row['most_frequent_percentage'], 'NOPATH']
                     loc += 1
-    res_paths.to_csv('paths_original.csv' if restrict_direction else 'paths_unrestricted.csv',encoding='utf-8',index=False)
+    res_paths.to_csv('{}_paths_original_{}.csv'.format(df_field, MAX_PATH_LEN) if restrict_direction else '{}_paths_unrestricted_{}.csv'.format(df_field, MAX_PATH_LEN), encoding='utf-8', index=False)
 
 
 def preprocess_sentence(sent, object_a, object_b):
-    a1 = sent.replace(object_a, ' Objecta ')
-    a2 = a1.replace(object_b, ' Objectb ')
-    a3 = a2.translate(None, string.punctuation)
-    return a3
+    # a1 = sent.replace('Objecta', ' Objecta ')
+    # a2 = a1.replace('Objectb', ' Objectb ')
+    return sent
 
 
 def parse_sentence(sent, vocabulary):
@@ -152,11 +158,11 @@ def shortest_path(path):
         else:
             return None
 
-        # The path from x to the lowest common head
-        hx = hx[i + 0:]
+            # The path from x to the lowest common head
+        hx = hx[i + 1:]
 
-        # The path from the lowest common head to y
-        hy = hy[i + 0:]
+            # The path from the lowest common head to y
+        hy = hy[i + 1:]
 
     if restrict_direction and lch and check_direction(lch, hx, lambda h: h.lefts):
         return None
@@ -190,7 +196,8 @@ def check_direction(lch, hs, f_dir):
     :param f_dir: function of direction
     :return:
     """
-    return any(modifier not in f_dir(head) for head, modifier in zip([lch] + hs[:-1], hs))
+    zipped = zip([lch] + hs[:-1], hs)
+    return any(modifier not in f_dir(head) for head, modifier in zipped)
 
 
 def get_satellite_links(path):
@@ -240,7 +247,7 @@ def edge_to_string(t, is_head=False):
     :param token: the token
     :return: the edge string
     """
-    return '/'.join([t.lemma_.strip().lower(), t.pos_, t.dep_ if t.dep_ != '' and not is_head else 'ROOT'])
+    return '/'.join([t.lemma_.strip().lower() if include_lemma else '', t.pos_, t.dep_ if t.dep_ != '' and not is_head else 'ROOT'])
 
 
 def argument_to_string(token, edge_name):
@@ -309,7 +316,7 @@ def pretty_print(set_x_l, x, set_x_r, hx, lch, hy, set_y_l, y, set_y_r):
                len(set_path_y_r) + len(set_path_y_l) + len(lch_lst)
 
     if len_path <= MAX_PATH_LEN:
-        cleaned_path = '_'.join(set_path_x_l + [argument_to_string(x, 'X') + '/' + dir_x] + set_path_x_r +
+        cleaned_path = ' '.join(set_path_x_l + [argument_to_string(x, 'X') + '/' + dir_x] + set_path_x_r +
                                 [edge_to_string(token) + '/' + direction(UP) for token in hx] +
                                 lch_lst +
                                 [edge_to_string(token) + '/' + direction(DOWN) for token in hy] +
@@ -318,13 +325,6 @@ def pretty_print(set_x_l, x, set_x_r, hx, lch, hy, set_y_l, y, set_y_r):
     else:
         return None
 
-
-# Constants
-MAX_PATH_LEN = 4 if restrict_direction else 50
-ROOT = 0
-UP = 1
-DOWN = 2
-SAT = 3
 
 if __name__ == '__main__':
     main()
