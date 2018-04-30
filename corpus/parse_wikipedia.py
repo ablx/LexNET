@@ -6,13 +6,13 @@ from collections import defaultdict
 import pandas as pd
 
 # Constants
-MAX_PATH_LEN = 16
+MAX_PATH_LEN = 4
 ROOT = 0
 UP = 1
 DOWN = 2
 SAT = 3
 
-restrict_direction = True
+restrict_direction = False
 include_lemma = True
 
 
@@ -41,14 +41,13 @@ def main():
                 if len(dependency_paths) > 0:
                     for (x, y), paths in dependency_paths.iteritems():
                         if len(paths) == 0:
-                            res_paths.loc[loc] = [row['id'], sent.text, row['object_a'], row['object_b'], row['most_frequent_label'], row['most_frequent_percentage'], 'NOPATH']
+                            res_paths.loc[loc] = [row['id'], row['sentence'], row['object_a'], row['object_b'], row['most_frequent_label'], row['most_frequent_percentage'], 'NOPATH']
                             loc += 1
                         for path in paths:
-                            res_paths.loc[loc] = [row['id'], sent.text, row['object_a'], row['object_b'], row['most_frequent_label'], row['most_frequent_percentage'], path]
+                            res_paths.loc[loc] = [row['id'], row['sentence'], row['object_a'], row['object_b'], row['most_frequent_label'], row['most_frequent_percentage'], path]
                             loc += 1
                 else:
-                    print >> f_out, '\t'.join([sentence, x, y, 'NO_PATH'])
-                    res_paths.loc[loc] = [row['id'], sent.text, row['object_a'], row['object_b'], row['most_frequent_label'], row['most_frequent_percentage'], 'NOPATH']
+                    res_paths.loc[loc] = [row['id'], row['sentence'], row['object_a'], row['object_b'], row['most_frequent_label'], row['most_frequent_percentage'], 'NOPATH']
                     loc += 1
     res_paths.to_csv('{}_paths_original_{}.csv'.format(df_field, MAX_PATH_LEN) if restrict_direction else '{}_paths_unrestricted_{}.csv'.format(df_field, MAX_PATH_LEN), encoding='utf-8', index=False)
 
